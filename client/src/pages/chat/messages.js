@@ -1,9 +1,10 @@
 import styles from './styles.module.css';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const Messages = ({ socket }) => {
     const [messagesReceived, setMessagesReceived] = useState([]);
 
+    const messagesColRef = useRef(null);
     // Runs whenever a socket event is recieved from the server
     useEffect(() => {
       socket.on('receive_message', (data) => {
@@ -21,28 +22,55 @@ const Messages = ({ socket }) => {
       // Remove event listener on component unmount
       return () => socket.off('receive_message');
     }, [socket]);
+
+
+    useEffect(() => {
+        // Fetch latest 100 messages from the db backend 
+        socket.on('last_100_messages', (last100Messages) => {
+          console.log('Last 100 messages:', JSON.parse(last100Messages));
+          last100Messages = JSON.parse(last100Messages);
+          // Sort these messages by __createdtime__
+          last100Messages = sortMsgByDate(last100Messages);
+          setMessagesReceived((state) => [...last100Messages, ...state]);
+        });
+    
+        return () => socket.off('last_100_messages');
+      }, [socket]);
+
+    // Scroll the most recent messages 
+    useEffect(() => {
+      messagesColRef.current.scrollTop = messagesColRef.current.scrollHeight;
+    }, [messagesReceived]);
+
+    function sortMsgByDate (messages) {
+        return messages.sort(
+            (a, b) => parseInt(a.__createdtime__) - parseInt(b.__createdtime__)
+          );
+        }
+    
     
     // dd/mm/yyyy, hh:mm:ss
-    function formatDateFromTimeStamp(timestamp) {
-        return new Date(timestamp).toLocaleString();
-    }
+    function formatDateFromTimestamp(timestamp) {
+        const date = new Date(timestamp);
+        return date.toLocaleString();
+      }
 
     return (
-        <div className={styles.messagesColumn} >
-            {messagesReceived.map((msg, i) => (
-                <div className={styles.message} key={i} >
-                    <div style={{ display: 'flex', justifyContent: 'space-between'}} >
-                        <span className={styles.msgMeta}>{msg.username}</span>
-                        <span className={styles.msgMeta}>
-                            {formatDateFromTimeStamp(msg.__createdtime__)}
-                        </span>
-                    </div>
-                    <p className={styles.msgText}>{msg.message}</p>
-                    <br />
-                </div>
-            ))}
+        <div className={styles.messagesColumn} ref={messagesColRef}>
+      {messagesReceived.map((msg, i) => (
+        <div className={styles.message} key={i}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span className={styles.msgMeta}>{msg.username}</span>
+            <span className={styles.msgMeta}>
+              {formatDateFromTimestamp(msg.__createdtime__)}
+            </span>
+          </div>
+          <p className={styles.msgText}>{msg.message}</p>
+          <br />
         </div>
-    );
+      ))}
+    </div>
+  );
 };
 
 export default Messages;
